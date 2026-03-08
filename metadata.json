@@ -1,0 +1,5 @@
+{
+  "name": "PsicoGestao",
+  "description": "Sistema de gestão para clínica escola de psicologia com fluxos de triagem, agendamento e atendimento.",
+  "requestFramePermissions": []
+}
