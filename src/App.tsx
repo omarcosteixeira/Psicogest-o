@@ -350,6 +350,7 @@ export default function App() {
                 patients={patients} 
                 users={users} 
                 settings={settings}
+                appointments={appointments}
                 onComplete={() => {
                   showToast('Agendamento realizado!', 'success');
                   setActiveTab('dashboard');
@@ -615,7 +616,7 @@ function RegisterPatientView({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function SchedulingView({ patients, users, settings, onComplete }: { patients: Patient[], users: User[], settings: ClinicSettings, onComplete: () => void }) {
+function SchedulingView({ patients, users, settings, appointments, onComplete }: { patients: Patient[], users: User[], settings: ClinicSettings, appointments: Appointment[], onComplete: () => void }) {
   const [formData, setFormData] = useState({
     patient_id: '',
     student_id: '',
@@ -624,6 +625,7 @@ function SchedulingView({ patients, users, settings, onComplete }: { patients: P
     time: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [scheduledData, setScheduledData] = useState<{
     patientName: string;
     date: string;
@@ -638,7 +640,19 @@ function SchedulingView({ patients, users, settings, onComplete }: { patients: P
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
+      // Check for available slots (max 2 per time)
+      const existingAppointments = appointments.filter(
+        a => a.date === formData.date && a.time === formData.time && a.status === 'SCHEDULED'
+      );
+
+      if (existingAppointments.length >= 2) {
+        setError('Este horário já possui 2 agendamentos. Por favor, escolha outro horário.');
+        setLoading(false);
+        return;
+      }
+
       // Find patient BEFORE async operations to ensure we have the data
       const patient = patients.find(p => p.id === formData.patient_id);
       const student = users.find(u => u.id === formData.student_id);
@@ -798,6 +812,12 @@ function SchedulingView({ patients, users, settings, onComplete }: { patients: P
             </div>
           </div>
 
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
+              {error}
+            </div>
+          )}
+
           <div className="flex justify-end gap-4 mt-4">
             <button
               type="submit"
@@ -825,6 +845,7 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
   const [nextTime, setNextTime] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState(false);
+  const [error, setError] = useState('');
 
   const handleUpdateStatus = async (id: string, status: 'ATTENDED' | 'MISSED') => {
     setUpdatingId(id);
@@ -874,7 +895,19 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
     e.preventDefault();
     if (!selectedAppointment) return;
     setProcessingAction(true);
+    setError('');
     try {
+      // Check for available slots (max 2 per time)
+      const existingAppointments = appointments.filter(
+        a => a.date === nextDate && a.time === nextTime && a.status === 'SCHEDULED'
+      );
+
+      if (existingAppointments.length >= 2) {
+        setError('Este horário já possui 2 agendamentos. Por favor, escolha outro horário.');
+        setProcessingAction(false);
+        return;
+      }
+
       const appRef = doc(db, 'appointments', selectedAppointment.id);
       const appSnap = await getDoc(appRef);
       let patientPhone = '';
@@ -1089,6 +1122,13 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
                   />
                 </div>
               </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
+                  {error}
+                </div>
+              )}
+
               <button 
                 type="submit"
                 disabled={processingAction}
