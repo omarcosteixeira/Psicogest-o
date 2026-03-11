@@ -14,7 +14,9 @@ import {
   UserCheck,
   ClipboardList,
   MessageCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Patient, Appointment, UserRole, PatientStatus, ClinicSettings } from './types';
@@ -262,7 +264,7 @@ export default function App() {
             onClick={() => setActiveTab('dashboard')} 
           />
           
-          {(user.role === 'ADMIN' || user.role === 'STUDENT_CLINIC') && (
+          {(user.role === 'ADMIN' || user.role === 'STUDENT_CLINIC' || user.role === 'PROFESSOR') && (
             <SidebarItem 
               icon={<UserPlus size={20} />} 
               label="Cadastrar Paciente" 
@@ -1298,6 +1300,7 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     password: '',
     role: 'STUDENT' as UserRole
   });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [scheduleData, setScheduleData] = useState<ClinicSettings>(settings);
 
@@ -1309,13 +1312,41 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     e.preventDefault();
     setLoading(true);
     try {
-      await addDoc(collection(db, 'users'), formData);
+      if (editingId) {
+        await updateDoc(doc(db, 'users', editingId), formData);
+        setEditingId(null);
+      } else {
+        await addDoc(collection(db, 'users'), formData);
+      }
       setFormData({ name: '', registration: '', password: '', role: 'STUDENT' });
       onUpdate();
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditUser = (user: User) => {
+    setFormData({
+      name: user.name,
+      registration: user.registration,
+      password: (user as any).password || '',
+      role: user.role
+    });
+    setEditingId(user.id);
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (confirm('Tem certeza que deseja excluir este usuário?')) {
+      try {
+        const { deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'users', userId));
+        onUpdate();
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao excluir usuário');
+      }
     }
   };
 
@@ -1360,7 +1391,7 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* User Registration */}
         <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
-          <h3 className="font-bold text-zinc-900 mb-6">Cadastrar Usuário</h3>
+          <h3 className="font-bold text-zinc-900 mb-6">{editingId ? 'Editar Usuário' : 'Cadastrar Usuário'}</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Nome Completo</label>
@@ -1406,13 +1437,27 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
                 <option value="ADMIN">Administrador</option>
               </select>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Cadastrando...' : 'Cadastrar Usuário'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Processando...' : editingId ? 'Salvar Alterações' : 'Cadastrar Usuário'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setFormData({ name: '', registration: '', password: '', role: 'STUDENT' });
+                  }}
+                  className="px-4 py-2 border border-zinc-300 rounded-lg text-zinc-600 hover:bg-zinc-50"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
@@ -1530,16 +1575,32 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
                       </td>
                       <td className="px-6 py-4">
                         {u.role !== 'ADMIN' && (
-                          <button
-                            onClick={() => handleToggleBlock(u.id, u.blocked)}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                              u.blocked 
-                                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                                : 'bg-red-100 text-red-700 hover:bg-red-200'
-                            }`}
-                          >
-                            {u.blocked ? 'Desbloquear' : 'Bloquear'}
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleToggleBlock(u.id, u.blocked)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                                u.blocked 
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+                              }`}
+                            >
+                              {u.blocked ? 'Desbloquear' : 'Bloquear'}
+                            </button>
+                            <button
+                              onClick={() => handleEditUser(u)}
+                              className="p-1 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
