@@ -19,7 +19,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Patient, Appointment, UserRole, PatientStatus, ClinicSettings } from './types';
+import { User, Patient, Appointment, UserRole, PatientStatus, ClinicSettings, Evolution, EvolutionStatus } from './types';
 import { db } from './firebase';
 import { 
   collection, 
@@ -30,6 +30,7 @@ import {
   updateDoc, 
   doc, 
   onSnapshot,
+  deleteDoc,
   setDoc,
   getDoc
 } from 'firebase/firestore';
@@ -365,6 +366,7 @@ export default function App() {
               <PatientHistoryView 
                 patients={patients} 
                 appointments={appointments} 
+                user={user}
                 onBack={() => setActiveTab('dashboard')} 
               />
             </motion.div>
@@ -524,6 +526,7 @@ function RegisterPatientView({ onComplete }: { onComplete: () => void }) {
 
       await addDoc(collection(db, 'patients'), {
         ...formData,
+        medical_record_number: Math.floor(100000 + Math.random() * 900000).toString(),
         status: 'TRIAGEM'
       });
       onComplete();
@@ -842,12 +845,13 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
   }, [user, appointments]);
 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [actionType, setActionType] = useState<'FINALIZE' | 'SCHEDULE_NEXT' | null>(null);
+  const [actionType, setActionType] = useState<'FINALIZE' | 'SCHEDULE_NEXT' | 'EVOLUTION' | null>(null);
   const [nextDate, setNextDate] = useState('');
   const [nextTime, setNextTime] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState(false);
   const [error, setError] = useState('');
+  const [evolutionData, setEvolutionData] = useState<Evolution | null>(null);
 
   const handleUpdateStatus = async (id: string, status: 'ATTENDED' | 'MISSED') => {
     setUpdatingId(id);
@@ -1036,12 +1040,22 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
                       </div>
                     )}
                     {(app.status === 'ATTENDED' || app.status === 'MISSED') && (
-                      <button
-                        onClick={() => { setSelectedAppointment(app); setActionType('FINALIZE'); }}
-                        className="px-3 py-1 bg-zinc-100 text-zinc-700 rounded-lg text-xs font-bold hover:bg-zinc-200"
-                      >
-                        Finalizar / Próximos Passos
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setSelectedAppointment(app); setActionType('FINALIZE'); }}
+                          className="px-3 py-1 bg-zinc-100 text-zinc-700 rounded-lg text-xs font-bold hover:bg-zinc-200"
+                        >
+                          Finalizar / Próximos Passos
+                        </button>
+                        {app.status === 'ATTENDED' && (
+                          <button
+                            onClick={() => { setSelectedAppointment(app); setActionType('EVOLUTION'); }}
+                            className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200"
+                          >
+                            Evolução
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1150,6 +1164,24 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
         </div>
       )}
 
+      {/* Modal for Evolution */}
+      {selectedAppointment && actionType === 'EVOLUTION' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl my-8">
+            <EvolutionForm 
+              appointment={selectedAppointment}
+              user={user}
+              onClose={() => { setSelectedAppointment(null); setActionType(null); }}
+              onSave={() => {
+                onUpdate();
+                setSelectedAppointment(null);
+                setActionType(null);
+              }}
+            />
+          </motion.div>
+        </div>
+      )}
+
       {/* Modal for Success with WhatsApp */}
       {scheduledData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -1185,13 +1217,46 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
   );
 }
 
-function PatientHistoryView({ patients, appointments, onBack }: { patients: Patient[], appointments: Appointment[], onBack: () => void }) {
+function PatientHistoryView({ patients, appointments, user, onBack }: { patients: Patient[], appointments: Appointment[], user: User, onBack: () => void }) {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
-  
+  const [evolutions, setEvolutions] = useState<Evolution[]>([]);
+  const [loadingEvolutions, setLoadingEvolutions] = useState(false);
+  const [selectedEvolution, setSelectedEvolution] = useState<Evolution | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [isEditingPatient, setIsEditingPatient] = useState(false);
+  const [editingPatientData, setEditingPatientData] = useState<Partial<Patient>>({});
+  const [settings, setSettings] = useState<ClinicSettings | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const docSnap = await getDoc(doc(db, 'settings', 'clinic_schedule'));
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as ClinicSettings);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   const selectedPatient = patients.find(p => p.id === selectedPatientId);
   const patientAppointments = appointments
     .filter(a => a.patient_id === selectedPatientId)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  useEffect(() => {
+    if (selectedPatientId) {
+      setLoadingEvolutions(true);
+      const q = query(collection(db, 'evolutions'), where('patient_id', '==', selectedPatientId));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const evs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Evolution));
+        setEvolutions(evs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setLoadingEvolutions(false);
+      });
+      return () => unsubscribe();
+    }
+  }, [selectedPatientId]);
 
   const stats = useMemo(() => {
     if (!selectedPatientId) return null;
@@ -1202,16 +1267,168 @@ function PatientHistoryView({ patients, appointments, onBack }: { patients: Pati
     };
   }, [patientAppointments, selectedPatientId]);
 
+  const handleApprove = async (evId: string) => {
+    try {
+      await updateDoc(doc(db, 'evolutions', evId), { status: 'APPROVED' });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedEvolution || !feedback) return;
+    try {
+      await updateDoc(doc(db, 'evolutions', selectedEvolution.id), { 
+        status: 'REJECTED',
+        feedback: feedback
+      });
+      setShowFeedbackModal(false);
+      setFeedback('');
+      setSelectedEvolution(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleEditPatient = () => {
+    if (!selectedPatient) return;
+    setEditingPatientData(selectedPatient);
+    setIsEditingPatient(true);
+  };
+
+  const handleSavePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) return;
+    try {
+      await updateDoc(doc(db, 'patients', selectedPatientId), editingPatientData);
+      setIsEditingPatient(false);
+      alert('Dados do paciente atualizados com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao atualizar paciente');
+    }
+  };
+
+  const handleDeletePatient = async () => {
+    if (!selectedPatientId) return;
+    setIsDeleting(true);
+    try {
+      // 1. Delete appointments
+      const qApp = query(collection(db, 'appointments'), where('patient_id', '==', selectedPatientId));
+      const snapApp = await getDocs(qApp);
+      const deleteAppPromises = snapApp.docs.map(d => deleteDoc(doc(db, 'appointments', d.id)));
+      
+      // 2. Delete evolutions
+      const qEv = query(collection(db, 'evolutions'), where('patient_id', '==', selectedPatientId));
+      const snapEv = await getDocs(qEv);
+      const deleteEvPromises = snapEv.docs.map(d => deleteDoc(doc(db, 'evolutions', d.id)));
+      
+      await Promise.all([...deleteAppPromises, ...deleteEvPromises]);
+
+      // 3. Delete patient
+      await deleteDoc(doc(db, 'patients', selectedPatientId));
+      
+      setSelectedPatientId('');
+      setShowDeleteConfirm(false);
+      alert('Paciente e todo seu histórico foram excluídos com sucesso!');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao excluir paciente: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handlePrint = (ev: Evolution) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const logoHtml = settings?.logoUrl 
+      ? `<div style="text-align: center; margin-bottom: 20px;"><img src="${settings.logoUrl}" style="max-height: 80px;" /></div>`
+      : '';
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Evolução Psicológica - ${ev.patient_name}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; line-height: 1.6; }
+            .header { text-align: center; border-bottom: 2px solid #000; margin-bottom: 30px; padding-bottom: 10px; }
+            .section { margin-bottom: 20px; }
+            .label { font-weight: bold; text-transform: uppercase; font-size: 12px; color: #666; }
+            .content { margin-top: 5px; border: 1px solid #eee; padding: 10px; border-radius: 4px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+            @media print { .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          ${logoHtml}
+          <div class="header">
+            <h1>EVOLUÇÃO PSICOLÓGICA</h1>
+            <p>Clínica Escola PsicoGestão</p>
+          </div>
+          <div class="grid">
+            <div><span class="label">Prontuário:</span><br/>${ev.medical_record_number}</div>
+            <div><span class="label">Paciente:</span><br/>${ev.patient_name}</div>
+            <div><span class="label">Data:</span><br/>${new Date(ev.date).toLocaleDateString('pt-BR')}</div>
+            <div><span class="label">Atendente:</span><br/>${ev.student_name}</div>
+          </div>
+          <div class="section">
+            <span class="label">Supervisor:</span><br/>${ev.supervisor_name}
+          </div>
+          <div class="section">
+            <span class="label">Síntese da Escuta:</span>
+            <div class="content">${ev.synthesis.replace(/\n/g, '<br/>')}</div>
+          </div>
+          <div class="section">
+            <span class="label">Conduta:</span>
+            <div class="content">${ev.conduct.replace(/\n/g, '<br/>')}</div>
+          </div>
+          <div class="section">
+            <span class="label">Observações:</span>
+            <div class="content">${ev.observations.replace(/\n/g, '<br/>')}</div>
+          </div>
+          <div style="margin-top: 50px; text-align: center;">
+            <div style="border-top: 1px solid #000; width: 200px; margin: 0 auto;"></div>
+            <p class="label">Assinatura do Supervisor</p>
+          </div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
-      <header className="flex items-center gap-4">
-        <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-lg">
-          <ChevronRight className="rotate-180" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Histórico do Paciente</h1>
-          <p className="text-zinc-500">Visualize o histórico de atendimentos.</p>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-lg">
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900">Histórico do Paciente</h1>
+            <p className="text-zinc-500">Visualize o histórico de atendimentos e evoluções.</p>
+          </div>
         </div>
+        {selectedPatient && (user.role === 'ADMIN' || user.role === 'PROFESSOR' || user.role === 'STUDENT_CLINIC') && (
+          <div className="flex gap-2">
+            <button 
+              onClick={handleEditPatient}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-bold hover:bg-indigo-100 transition-colors"
+            >
+              <Edit2 size={18} />
+              Editar Paciente
+            </button>
+            <button 
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={18} />
+              Excluir Paciente
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
@@ -1223,10 +1440,89 @@ function PatientHistoryView({ patients, appointments, onBack }: { patients: Pati
         >
           <option value="">Selecione um paciente...</option>
           {patients.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>{p.name} (Prontuário: {p.medical_record_number})</option>
           ))}
         </select>
       </div>
+
+      {isEditingPatient && selectedPatient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl my-8">
+            <h2 className="text-xl font-bold text-zinc-900 mb-6">Editar Dados do Paciente</h2>
+            <form onSubmit={handleSavePatient} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Nome Completo</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.name || ''}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Telefone</label>
+                <input
+                  type="tel"
+                  required
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.phone || ''}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.email || ''}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, email: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.address || ''}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, address: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Status</label>
+                <select
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.status || ''}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, status: e.target.value as PatientStatus })}
+                >
+                  <option value="TRIAGEM">Triagem</option>
+                  <option value="AGUARDANDO_CONSULTA">Aguardando Consulta</option>
+                  <option value="PACIENTE_ATIVO">Paciente Ativo</option>
+                  <option value="ALTA">Alta</option>
+                  <option value="DESISTENCIA">Desistência</option>
+                </select>
+              </div>
+              <div className="md:col-span-2 flex gap-4 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors"
+                >
+                  Salvar Alterações
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPatient(false)}
+                  className="px-6 py-2 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {selectedPatient && stats && (
         <div className="space-y-6">
@@ -1246,6 +1542,9 @@ function PatientHistoryView({ patients, appointments, onBack }: { patients: Pati
           </div>
 
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-zinc-100 bg-zinc-50">
+              <h3 className="font-bold text-zinc-900 text-sm uppercase tracking-wider">Histórico de Agendamentos</h3>
+            </div>
             <table className="w-full text-left">
               <thead className="bg-zinc-50 text-zinc-500 text-[10px] uppercase tracking-wider font-bold">
                 <tr>
@@ -1287,8 +1586,277 @@ function PatientHistoryView({ patients, appointments, onBack }: { patients: Pati
               </tbody>
             </table>
           </div>
+
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-zinc-100 bg-zinc-50 flex justify-between items-center">
+              <h3 className="font-bold text-zinc-900 text-sm uppercase tracking-wider">Evoluções Psicológicas</h3>
+              {loadingEvolutions && <span className="text-xs text-zinc-400 animate-pulse">Carregando...</span>}
+            </div>
+            <div className="p-6 space-y-6">
+              {evolutions.map(ev => (
+                <div key={ev.id} className="border border-zinc-100 rounded-xl p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-bold text-zinc-900">{new Date(ev.date).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-xs text-zinc-500">Atendente: {ev.student_name} | Supervisor: {ev.supervisor_name}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      ev.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                      ev.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {ev.status === 'APPROVED' ? 'Aprovado' :
+                       ev.status === 'REJECTED' ? 'Rejeitado' : 'Aguardando Aprovação'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Síntese da Escuta</p>
+                      <p className="text-zinc-700 whitespace-pre-wrap">{ev.synthesis}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Conduta</p>
+                      <p className="text-zinc-700 whitespace-pre-wrap">{ev.conduct}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Observações</p>
+                      <p className="text-zinc-700 whitespace-pre-wrap">{ev.observations}</p>
+                    </div>
+                    {ev.feedback && (
+                      <div className="md:col-span-2 bg-red-50 p-3 rounded-lg border border-red-100">
+                        <p className="text-[10px] font-bold text-red-600 uppercase mb-1">Feedback do Supervisor</p>
+                        <p className="text-red-700">{ev.feedback}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-zinc-50">
+                    {(user.role === 'ADMIN' || user.role === 'PROFESSOR') && ev.status === 'PENDING' && (
+                      <>
+                        <button 
+                          onClick={() => handleApprove(ev.id)}
+                          className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
+                        >
+                          Aprovar
+                        </button>
+                        <button 
+                          onClick={() => { setSelectedEvolution(ev); setShowFeedbackModal(true); }}
+                          className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors"
+                        >
+                          Rejeitar
+                        </button>
+                      </>
+                    )}
+                    {ev.status === 'APPROVED' && (
+                      <button 
+                        onClick={() => handlePrint(ev)}
+                        className="px-3 py-1 bg-zinc-900 text-white rounded-lg text-xs font-bold hover:bg-zinc-800 transition-colors flex items-center gap-2"
+                      >
+                        <ClipboardList size={14} />
+                        Imprimir / PDF
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {evolutions.length === 0 && !loadingEvolutions && (
+                <p className="text-center text-zinc-500 py-8">Nenhuma evolução registrada para este paciente.</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && selectedPatient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="text-red-600 w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 mb-2">Excluir Paciente?</h2>
+            <p className="text-zinc-500 mb-6">
+              Tem certeza que deseja excluir <strong>{selectedPatient.name}</strong>? 
+              Esta ação excluirá permanentemente o paciente, todos os seus agendamentos e evoluções.
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeletePatient}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? 'Excluindo...' : 'Sim, Excluir Tudo'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-zinc-900 mb-2">Motivo da Rejeição</h3>
+            <p className="text-zinc-500 mb-4 text-sm">Informe ao aluno o que precisa ser corrigido.</p>
+            <textarea
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px] mb-4"
+              placeholder="Ex: Melhorar a descrição da conduta..."
+              value={feedback}
+              onChange={e => setFeedback(e.target.value)}
+            />
+            <div className="flex gap-3">
+              <button 
+                onClick={handleReject}
+                className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 transition-colors"
+              >
+                Confirmar Rejeição
+              </button>
+              <button 
+                onClick={() => { setShowFeedbackModal(false); setFeedback(''); }}
+                className="px-4 py-2 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EvolutionForm({ appointment, user, onClose, onSave }: { appointment: Appointment, user: User, onClose: () => void, onSave: () => void }) {
+  const [formData, setFormData] = useState({
+    synthesis: '',
+    conduct: '',
+    observations: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [patientData, setPatientData] = useState<Patient | null>(null);
+
+  useEffect(() => {
+    const fetchPatient = async () => {
+      const docRef = doc(db, 'patients', appointment.patient_id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setPatientData({ id: docSnap.id, ...docSnap.data() } as Patient);
+      }
+    };
+    fetchPatient();
+  }, [appointment.patient_id]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await addDoc(collection(db, 'evolutions'), {
+        appointment_id: appointment.id,
+        patient_id: appointment.patient_id,
+        patient_name: appointment.patient_name,
+        medical_record_number: patientData?.medical_record_number || '',
+        student_id: user.id,
+        student_name: user.name,
+        supervisor_id: appointment.supervisor_id,
+        supervisor_name: appointment.supervisor_name,
+        date: new Date().toISOString().split('T')[0],
+        ...formData,
+        status: 'PENDING'
+      });
+      onSave();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar evolução');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!patientData) return <div className="text-center py-8">Carregando dados do paciente...</div>;
+
+  return (
+    <div className="space-y-6">
+      <header className="border-b border-zinc-100 pb-4">
+        <h2 className="text-2xl font-bold text-zinc-900">EVOLUÇÃO PSICOLÓGICA</h2>
+        <p className="text-zinc-500 text-sm">Preencha os dados do atendimento</p>
+      </header>
+
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="bg-zinc-50 p-3 rounded-lg">
+          <span className="block text-zinc-500 font-bold uppercase text-[10px]">Prontuário</span>
+          <span className="text-zinc-900 font-medium">{patientData.medical_record_number}</span>
+        </div>
+        <div className="bg-zinc-50 p-3 rounded-lg">
+          <span className="block text-zinc-500 font-bold uppercase text-[10px]">Paciente</span>
+          <span className="text-zinc-900 font-medium">{patientData.name}</span>
+        </div>
+        <div className="bg-zinc-50 p-3 rounded-lg">
+          <span className="block text-zinc-500 font-bold uppercase text-[10px]">Data</span>
+          <span className="text-zinc-900 font-medium">{new Date().toLocaleDateString('pt-BR')}</span>
+        </div>
+        <div className="bg-zinc-50 p-3 rounded-lg">
+          <span className="block text-zinc-500 font-bold uppercase text-[10px]">Atendente</span>
+          <span className="text-zinc-900 font-medium">{user.name}</span>
+        </div>
+        <div className="bg-zinc-50 p-3 rounded-lg col-span-2">
+          <span className="block text-zinc-500 font-bold uppercase text-[10px]">Supervisor</span>
+          <span className="text-zinc-900 font-medium">{appointment.supervisor_name}</span>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-bold text-zinc-700 mb-1 uppercase">Síntese da Escuta</label>
+          <textarea
+            required
+            className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px]"
+            value={formData.synthesis}
+            onChange={e => setFormData({ ...formData, synthesis: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-zinc-700 mb-1 uppercase">Conduta</label>
+          <textarea
+            required
+            className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[80px]"
+            value={formData.conduct}
+            onChange={e => setFormData({ ...formData, conduct: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-zinc-700 mb-1 uppercase">Observações</label>
+          <textarea
+            className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[80px]"
+            value={formData.observations}
+            onChange={e => setFormData({ ...formData, observations: e.target.value })}
+          />
+        </div>
+
+        <div className="flex gap-4 pt-4">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Salvando...' : 'Salvar Evolução'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-3 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1355,10 +1923,21 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     try {
       await setDoc(doc(db, 'settings', 'clinic_schedule'), scheduleData);
       onUpdateSettings(scheduleData);
-      alert('Horários atualizados com sucesso!');
+      alert('Configurações atualizadas com sucesso!');
     } catch (err) {
       console.error(err);
-      alert('Erro ao atualizar horários');
+      alert('Erro ao atualizar configurações');
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScheduleData({ ...scheduleData, logoUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -1530,6 +2109,22 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
                 onChange={e => setScheduleData({ ...scheduleData, whatsappMessageTemplate: e.target.value })}
                 placeholder="Olá {paciente}, sua consulta está agendada para {data} às {hora}."
               />
+            </div>
+
+            <div className="border-t border-zinc-100 pt-6">
+              <label className="block text-sm font-medium text-zinc-700 mb-2">Logo da Clínica (PDF)</label>
+              <div className="flex items-center gap-4">
+                {scheduleData.logoUrl && (
+                  <img src={scheduleData.logoUrl} alt="Logo" className="h-12 w-auto object-contain border border-zinc-200 rounded p-1" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+              </div>
+              <p className="text-[10px] text-zinc-400 mt-2">Recomendado: PNG ou JPG com fundo transparente.</p>
             </div>
 
             <button

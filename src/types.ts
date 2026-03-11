@@ -13,6 +13,7 @@ export type PatientStatus = 'TRIAGEM' | 'AGUARDANDO_CONSULTA' | 'PACIENTE_ATIVO'
 export interface Patient {
   id: string;
   name: string;
+  medical_record_number: string;
   birth_date: string;
   phone: string;
   email: string;
@@ -20,6 +21,26 @@ export interface Patient {
   address: string;
   status: PatientStatus;
   age?: number;
+}
+
+export type EvolutionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Evolution {
+  id: string;
+  appointment_id: string;
+  patient_id: string;
+  patient_name: string;
+  medical_record_number: string;
+  student_id: string;
+  student_name: string;
+  supervisor_id: string;
+  supervisor_name: string;
+  date: string;
+  synthesis: string;
+  conduct: string;
+  observations: string;
+  status: EvolutionStatus;
+  feedback?: string;
 }
 
 export interface Appointment {
@@ -42,4 +63,5 @@ export interface ClinicSettings {
   endTime: string;
   interval: number; // minutes
   whatsappMessageTemplate?: string;
+  logoUrl?: string;
 }
