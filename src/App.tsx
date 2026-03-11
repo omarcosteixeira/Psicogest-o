@@ -80,6 +80,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loginData, setLoginData] = useState({ registration: '', password: '' });
   const [error, setError] = useState('');
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [settings, setSettings] = useState<ClinicSettings>({
@@ -321,13 +322,22 @@ export default function App() {
               <p className="text-[10px] text-zinc-500 uppercase">{ROLES[user.role]}</p>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <LogOut size={18} />
-            Sair
-          </button>
+          <div className="px-2 space-y-1 mb-2">
+            <button 
+              onClick={() => setShowChangePassword(true)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
+            >
+              <Edit2 size={18} />
+              Alterar Senha
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <LogOut size={18} />
+              Sair
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -393,6 +403,17 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {showChangePassword && user && (
+        <ChangePasswordModal 
+          user={user} 
+          onClose={() => setShowChangePassword(false)} 
+          onSuccess={() => {
+            setShowChangePassword(false);
+            showToast('Senha alterada com sucesso!', 'success');
+          }}
+        />
+      )}
 
       {toast && (
         <div className={`fixed bottom-8 right-8 px-6 py-3 rounded-lg shadow-lg text-white font-medium z-50 animate-bounce ${
@@ -1871,10 +1892,18 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [scheduleData, setScheduleData] = useState<ClinicSettings>(settings);
+  const [userFilter, setUserFilter] = useState('');
 
   useEffect(() => {
     setScheduleData(settings);
   }, [settings]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => 
+      u.name.toLowerCase().includes(userFilter.toLowerCase()) ||
+      u.registration.toLowerCase().includes(userFilter.toLowerCase())
+    );
+  }, [users, userFilter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2139,8 +2168,18 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
 
         <div className="lg:col-span-2">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-zinc-100">
+            <div className="p-6 border-b border-zinc-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h3 className="font-bold text-zinc-900">Usuários Cadastrados</h3>
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Buscar usuário..."
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  value={userFilter}
+                  onChange={e => setUserFilter(e.target.value)}
+                />
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -2154,7 +2193,7 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {users.map(u => (
+                  {filteredUsers.map(u => (
                     <tr key={u.id} className="hover:bg-zinc-50 transition-colors">
                       <td className="px-6 py-4 text-sm font-medium text-zinc-900">{u.name}</td>
                       <td className="px-6 py-4 text-sm text-zinc-600">{u.registration}</td>
@@ -2200,6 +2239,13 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
                       </td>
                     </tr>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-zinc-500 text-sm">
+                        Nenhum usuário encontrado.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2208,3 +2254,118 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     </div>
   );
 }
+
+function ChangePasswordModal({ user, onClose, onSuccess }: { user: User, onClose: () => void, onSuccess: () => void }) {
+  const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (passwords.new !== passwords.confirm) {
+      setError('As senhas não coincidem');
+      return;
+    }
+
+    if (passwords.new.length < 4) {
+      setError('A nova senha deve ter pelo menos 4 caracteres');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // First verify current password
+      const userDoc = await getDoc(doc(db, 'users', user.id));
+      if (!userDoc.exists()) throw new Error('Usuário não encontrado');
+      
+      const userData = userDoc.data();
+      if (userData.password !== passwords.current) {
+        setError('Senha atual incorreta');
+        setLoading(false);
+        return;
+      }
+
+      // Update password
+      await updateDoc(doc(db, 'users', user.id), {
+        password: passwords.new
+      });
+      
+      onSuccess();
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao alterar senha');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[100]">
+      <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+        <h3 className="text-xl font-bold text-zinc-900 mb-6">Alterar Senha</h3>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+              {error}
+            </div>
+          )}
+          
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Senha Atual</label>
+            <input
+              type="password"
+              required
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+              value={passwords.current}
+              onChange={e => setPasswords({ ...passwords, current: e.target.value })}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Nova Senha</label>
+            <input
+              type="password"
+              required
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+              value={passwords.new}
+              onChange={e => setPasswords({ ...passwords, new: e.target.value })}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Confirmar Nova Senha</label>
+            <input
+              type="password"
+              required
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+              value={passwords.confirm}
+              onChange={e => setPasswords({ ...passwords, confirm: e.target.value })}
+            />
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Alterando...' : 'Alterar Senha'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
