@@ -64,4 +64,7 @@ export interface ClinicSettings {
   interval: number; // minutes
   whatsappMessageTemplate?: string;
   logoUrl?: string;
+  heroImageUrl?: string;
+  projectDescription?: string;
+  carouselImages?: string[];
 }

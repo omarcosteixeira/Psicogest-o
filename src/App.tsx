@@ -11,6 +11,7 @@ import {
   Clock, 
   Search,
   ChevronRight,
+  ChevronLeft,
   UserCheck,
   ClipboardList,
   MessageCircle,
@@ -81,6 +82,7 @@ export default function App() {
   const [loginData, setLoginData] = useState({ registration: '', password: '' });
   const [error, setError] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [publicView, setPublicView] = useState<'LANDING' | 'LOGIN' | 'REGISTER' | 'CHECK'>('LANDING');
 
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [settings, setSettings] = useState<ClinicSettings>({
@@ -193,53 +195,91 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-zinc-200 p-8"
-        >
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-200">
-              <ClipboardList className="text-white w-8 h-8" />
-            </div>
-            <h1 className="text-2xl font-bold text-zinc-900">PsicoGestão</h1>
-            <p className="text-zinc-500 text-sm">Clínica Escola de Psicologia</p>
-          </div>
+      <div className="min-h-screen bg-zinc-50 flex flex-col">
+        <AnimatePresence mode="wait">
+          {publicView === 'LANDING' && (
+            <motion.div key="landing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex-1 flex overflow-y-auto">
+              <LandingView onNavigate={setPublicView} settings={settings} />
+            </motion.div>
+          )}
+          
+          {publicView === 'LOGIN' && (
+            <motion.div key="login" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-zinc-200 p-8">
+                <button onClick={() => setPublicView('LANDING')} className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 mb-6 transition-colors">
+                  <ChevronRight className="rotate-180 w-4 h-4" /> Voltar
+                </button>
+                <div className="flex flex-col items-center mb-8">
+                  <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-200">
+                    <ClipboardList className="text-white w-8 h-8" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-zinc-900">PsicoGestão</h1>
+                  <p className="text-zinc-500 text-sm">Clínica Escola de Psicologia</p>
+                </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Matrícula ou Email</label>
-              <input
-                type="text"
-                required
-                className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="Digite sua matrícula ou email"
-                value={loginData.registration}
-                onChange={e => setLoginData({ ...loginData, registration: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Senha</label>
-              <input
-                type="password"
-                required
-                className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="••••••••"
-                value={loginData.password}
-                onChange={e => setLoginData({ ...loginData, password: e.target.value })}
-              />
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 shadow-md shadow-indigo-100"
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 mb-1">Matrícula ou Email</label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                      placeholder="Digite sua matrícula ou email"
+                      value={loginData.registration}
+                      onChange={e => setLoginData({ ...loginData, registration: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 mb-1">Senha</label>
+                    <input
+                      type="password"
+                      required
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                      placeholder="••••••••"
+                      value={loginData.password}
+                      onChange={e => setLoginData({ ...loginData, password: e.target.value })}
+                    />
+                  </div>
+                  {error && <p className="text-red-500 text-sm">{error}</p>}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 shadow-md shadow-indigo-100"
+                  >
+                    {loading ? 'Entrando...' : 'Entrar'}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+          {publicView === 'REGISTER' && (
+            <motion.div key="register" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex-1 flex overflow-y-auto">
+              <PublicRegisterView onBack={() => setPublicView('LANDING')} />
+            </motion.div>
+          )}
+
+          {publicView === 'CHECK' && (
+            <motion.div key="check" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex-1 flex overflow-y-auto">
+              <CheckAppointmentView onBack={() => setPublicView('LANDING')} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Public Footer */}
+        <footer className="w-full bg-zinc-900 text-zinc-400 py-4 text-center text-sm mt-auto z-10">
+          <p>
+            Sistema Criado pela Agencia Argo's - Contato:{' '}
+            <a 
+              href="https://wa.me/5524992777019?text=Gostaria%20de%20realizar%20um%20or%C3%A7amento." 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
             >
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-          </form>
-        </motion.div>
+              24992777019
+            </a>
+          </p>
+        </footer>
       </div>
     );
   }
@@ -1970,6 +2010,37 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     }
   };
 
+  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScheduleData({ ...scheduleData, heroImageUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCarouselImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const currentImages = scheduleData.carouselImages || [];
+        setScheduleData({ ...scheduleData, carouselImages: [...currentImages, reader.result as string] });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeCarouselImage = (index: number) => {
+    const currentImages = scheduleData.carouselImages || [];
+    setScheduleData({
+      ...scheduleData,
+      carouselImages: currentImages.filter((_, i) => i !== index)
+    });
+  };
+
   const toggleDay = (day: number) => {
     const newDays = scheduleData.workDays.includes(day)
       ? scheduleData.workDays.filter(d => d !== day)
@@ -2164,6 +2235,74 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
             </button>
           </form>
         </div>
+
+        {/* Landing Page Settings */}
+        <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm h-fit lg:col-span-2">
+          <h3 className="font-bold text-zinc-900 mb-6">Configurações da Página Inicial</h3>
+          <form onSubmit={handleSaveSchedule} className="space-y-6">
+            
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Texto de Apresentação (Projeto)</label>
+              <textarea
+                className="w-full px-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
+                value={scheduleData.projectDescription || ''}
+                onChange={e => setScheduleData({ ...scheduleData, projectDescription: e.target.value })}
+                placeholder="Descreva o projeto da clínica escola..."
+              />
+            </div>
+
+            <div className="border-t border-zinc-100 pt-6">
+              <label className="block text-sm font-medium text-zinc-700 mb-2">Imagem de Fundo (Hero)</label>
+              <div className="flex items-center gap-4">
+                {scheduleData.heroImageUrl && (
+                  <img src={scheduleData.heroImageUrl} alt="Hero" className="h-20 w-32 object-cover border border-zinc-200 rounded" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleHeroImageUpload}
+                  className="text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-zinc-100 pt-6">
+              <label className="block text-sm font-medium text-zinc-700 mb-2">Imagens do Carrossel (Projetos/Clínica)</label>
+              <div className="flex flex-col gap-4">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCarouselImageUpload}
+                  className="text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+                
+                {scheduleData.carouselImages && scheduleData.carouselImages.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-2">
+                    {scheduleData.carouselImages.map((img, idx) => (
+                      <div key={idx} className="relative group aspect-video rounded-lg overflow-hidden border border-zinc-200">
+                        <img src={img} alt={`Carousel ${idx}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeCarouselImage(idx)}
+                          className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Salvar Configurações da Página Inicial
+            </button>
+          </form>
+        </div>
       </div>
 
         <div className="lg:col-span-2">
@@ -2251,6 +2390,298 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
             </div>
           </div>
         </div>
+    </div>
+  );
+}
+
+function LandingView({ onNavigate, settings }: { onNavigate: (view: 'LOGIN' | 'REGISTER' | 'CHECK') => void, settings: ClinicSettings }) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const nextImage = () => {
+    if (settings.carouselImages && settings.carouselImages.length > 0) {
+      setCurrentImageIndex((prev) => (prev + 1) % settings.carouselImages!.length);
+    }
+  };
+
+  const prevImage = () => {
+    if (settings.carouselImages && settings.carouselImages.length > 0) {
+      setCurrentImageIndex((prev) => (prev - 1 + settings.carouselImages!.length) % settings.carouselImages!.length);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col">
+      {/* Hero Section */}
+      <div className="relative bg-zinc-900 text-white">
+        {settings.heroImageUrl && (
+          <div className="absolute inset-0 overflow-hidden">
+            <img src={settings.heroImageUrl} alt="Clínica" className="w-full h-full object-cover opacity-40" />
+          </div>
+        )}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 flex flex-col items-center text-center">
+          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-900 mb-8">
+            <ClipboardList className="text-white w-10 h-10" />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">Clínica Escola PsicoGestão</h1>
+          <p className="text-lg md:text-xl text-zinc-300 max-w-3xl mb-12">
+            {settings.projectDescription || 'Bem-vindo ao sistema de agendamento e triagem da Clínica Escola. Oferecemos atendimento psicológico acessível e de qualidade para a comunidade.'}
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+            <button onClick={() => onNavigate('REGISTER')} className="p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:bg-white/20 transition-all flex flex-col items-center gap-4 group">
+              <div className="w-14 h-14 bg-indigo-500/20 rounded-full flex items-center justify-center group-hover:bg-indigo-500/40 transition-colors">
+                <UserPlus className="text-indigo-300 w-7 h-7" />
+              </div>
+              <h3 className="font-bold text-white text-lg">Cadastrar para Consulta</h3>
+            </button>
+            <button onClick={() => onNavigate('CHECK')} className="p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:bg-white/20 transition-all flex flex-col items-center gap-4 group">
+              <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center group-hover:bg-green-500/40 transition-colors">
+                <Calendar className="text-green-300 w-7 h-7" />
+              </div>
+              <h3 className="font-bold text-white text-lg">Consultar Agendamento</h3>
+            </button>
+            <button onClick={() => onNavigate('LOGIN')} className="p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:bg-white/20 transition-all flex flex-col items-center gap-4 group">
+              <div className="w-14 h-14 bg-zinc-500/20 rounded-full flex items-center justify-center group-hover:bg-zinc-500/40 transition-colors">
+                <LayoutDashboard className="text-zinc-300 w-7 h-7" />
+              </div>
+              <h3 className="font-bold text-white text-lg">Acessar Sistema</h3>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Carousel Section */}
+      {settings.carouselImages && settings.carouselImages.length > 0 && (
+        <div className="max-w-5xl mx-auto px-6 py-16 w-full">
+          <h2 className="text-2xl font-bold text-zinc-900 mb-8 text-center">Nossa Clínica e Projetos</h2>
+          <div className="relative rounded-2xl overflow-hidden bg-zinc-100 aspect-video shadow-lg">
+            <img 
+              src={settings.carouselImages[currentImageIndex]} 
+              alt={`Slide ${currentImageIndex + 1}`} 
+              className="w-full h-full object-cover"
+            />
+            
+            {settings.carouselImages.length > 1 && (
+              <>
+                <button 
+                  onClick={prevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <button 
+                  onClick={nextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                >
+                  <ChevronRight size={24} />
+                </button>
+                
+                <div className="absolute bottom-4 left-1/2 -translate-y-1/2 flex gap-2">
+                  {settings.carouselImages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentImageIndex(idx)}
+                      className={`w-2 h-2 rounded-full transition-all ${idx === currentImageIndex ? 'bg-white w-4' : 'bg-white/50'}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PublicRegisterView({ onBack }: { onBack: () => void }) {
+  const [formData, setFormData] = useState({ name: '', birth_date: '', phone: '', email: '', cpf: '', address: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const q = query(collection(db, 'patients'), where('cpf', '==', formData.cpf));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        setError('CPF já cadastrado em nosso sistema.');
+        setLoading(false);
+        return;
+      }
+      await addDoc(collection(db, 'patients'), {
+        ...formData,
+        medical_record_number: Math.floor(100000 + Math.random() * 900000).toString(),
+        status: 'TRIAGEM'
+      });
+      setSuccess(true);
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao realizar cadastro. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle className="text-green-600 w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-bold text-zinc-900 mb-4">Cadastro Realizado!</h2>
+        <p className="text-zinc-600 max-w-md mb-8">
+          Seus dados foram enviados com sucesso. Você está na nossa fila de triagem e entraremos em contato em breve para agendar sua consulta.
+        </p>
+        <button onClick={onBack} className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">
+          Voltar para o Início
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-4 py-12">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-zinc-200 p-8">
+        <button onClick={onBack} className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 mb-6 transition-colors">
+          <ChevronRight className="rotate-180 w-4 h-4" /> Voltar
+        </button>
+        <h2 className="text-2xl font-bold text-zinc-900 mb-6">Cadastro para Consulta</h2>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Nome Completo</label>
+            <input type="text" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Data de Nascimento</label>
+            <input type="date" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.birth_date} onChange={e => setFormData({ ...formData, birth_date: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">CPF</label>
+            <input type="text" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData({ ...formData, cpf: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Telefone</label>
+            <input type="tel" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="(00) 00000-0000" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Email</label>
+            <input type="email" className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="email@exemplo.com" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço Completo</label>
+            <input type="text" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Rua, Número, Bairro, Cidade - UF" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
+          </div>
+          {error && <p className="md:col-span-2 text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={loading} className="md:col-span-2 mt-4 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">
+            {loading ? 'Enviando...' : 'Finalizar Cadastro'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CheckAppointmentView({ onBack }: { onBack: () => void }) {
+  const [cpf, setCpf] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ patient: Patient, appointment?: Appointment } | null>(null);
+
+  const handleCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setResult(null);
+    try {
+      const qPatient = query(collection(db, 'patients'), where('cpf', '==', cpf));
+      const snapPatient = await getDocs(qPatient);
+      if (snapPatient.empty) {
+        setError('CPF não encontrado em nossa base de dados.');
+        setLoading(false);
+        return;
+      }
+      const patient = { id: snapPatient.docs[0].id, ...snapPatient.docs[0].data() } as Patient;
+      
+      const qApp = query(collection(db, 'appointments'), where('patient_id', '==', patient.id), where('status', '==', 'SCHEDULED'));
+      const snapApp = await getDocs(qApp);
+      
+      let appointment;
+      if (!snapApp.empty) {
+        // Get the closest upcoming appointment
+        const apps = snapApp.docs.map(d => ({ id: d.id, ...d.data() } as Appointment));
+        apps.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        appointment = apps[0];
+      }
+
+      setResult({ patient, appointment });
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao consultar. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-zinc-200 p-8">
+        <button onClick={onBack} className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 mb-6 transition-colors">
+          <ChevronRight className="rotate-180 w-4 h-4" /> Voltar
+        </button>
+        <h2 className="text-2xl font-bold text-zinc-900 mb-2">Consultar Agendamento</h2>
+        <p className="text-zinc-500 mb-6 text-sm">Digite seu CPF para verificar o status da sua consulta.</p>
+        
+        <form onSubmit={handleCheck} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">CPF</label>
+            <input
+              type="text"
+              required
+              className="w-full px-4 py-3 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="000.000.000-00"
+              value={cpf}
+              onChange={e => setCpf(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">
+            {loading ? 'Consultando...' : 'Consultar'}
+          </button>
+        </form>
+
+        {result && (
+          <div className="mt-8 p-6 bg-zinc-50 rounded-xl border border-zinc-200">
+            <h3 className="font-bold text-zinc-900 mb-2">Olá, {result.patient.name.split(' ')[0]}</h3>
+            {result.appointment ? (
+              <div>
+                <p className="text-zinc-600 text-sm mb-4">Sua próxima consulta está confirmada:</p>
+                <div className="bg-white p-4 rounded-lg border border-zinc-200 space-y-2">
+                  <div className="flex items-center gap-2 text-zinc-700">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span className="font-medium">{new Date(result.appointment.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-700">
+                    <Clock className="w-4 h-4 text-indigo-600" />
+                    <span className="font-medium">{result.appointment.time}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-zinc-600 text-sm">
+                  {result.patient.status === 'TRIAGEM' || result.patient.status === 'AGUARDANDO_CONSULTA' 
+                    ? 'Você está na nossa fila de espera. Entraremos em contato em breve para agendar seu horário.'
+                    : 'No momento não há consultas futuras agendadas para você.'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
