@@ -213,8 +213,8 @@ export default function App() {
                   <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-200">
                     <ClipboardList className="text-white w-8 h-8" />
                   </div>
-                  <h1 className="text-2xl font-bold text-zinc-900">PsicoGestão</h1>
-                  <p className="text-zinc-500 text-sm">Clínica Escola de Psicologia</p>
+                  <h1 className="text-2xl font-bold text-zinc-900 text-center">Clinica Escola de Psicologia</h1>
+                  <p className="text-zinc-500 text-sm">Angra dos Reis</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -293,8 +293,8 @@ export default function App() {
             <ClipboardList className="text-white w-5 h-5" />
           </div>
           <div>
-            <h2 className="font-bold text-zinc-900 leading-tight">PsicoGestão</h2>
-            <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Clínica Escola</span>
+            <h2 className="font-bold text-zinc-900 leading-tight text-sm">Clinica Escola de Psicologia</h2>
+            <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Angra dos Reis</span>
           </div>
         </div>
 
@@ -762,7 +762,7 @@ function SchedulingView({ patients, users, settings, appointments, onComplete }:
 
   if (scheduledData) {
     const phone = scheduledData.phone.replace(/\D/g, '');
-    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clínica Escola PsicoGestão está agendada para {data} às {hora}. Por favor, confirme sua presença.';
+    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola de Psicologia Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
     
     const message = encodeURIComponent(
       template
@@ -1027,7 +1027,7 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
   const getWhatsappUrl = () => {
     if (!scheduledData) return '';
     const phone = scheduledData.phone.replace(/\D/g, '');
-    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clínica Escola PsicoGestão está agendada para {data} às {hora}. Por favor, confirme sua presença.';
+    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola de Psicologia Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
     
     const message = encodeURIComponent(
       template
@@ -1426,7 +1426,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
           ${logoHtml}
           <div class="header">
             <h1>EVOLUÇÃO PSICOLÓGICA</h1>
-            <p>Clínica Escola PsicoGestão</p>
+            <p>Clinica Escola de Psicologia Angra dos Reis</p>
           </div>
           <div class="grid">
             <div><span class="label">Prontuário:</span><br/>${ev.medical_record_number}</div>
@@ -1999,37 +1999,62 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setScheduleData({ ...scheduleData, logoUrl: reader.result as string });
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const compressed = await compressImage(file, 400, 400);
+      setScheduleData({ ...scheduleData, logoUrl: compressed });
     }
   };
 
-  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setScheduleData({ ...scheduleData, heroImageUrl: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImage(file, 1200, 800);
+      setScheduleData({ ...scheduleData, heroImageUrl: compressed });
     }
   };
 
-  const handleCarouselImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCarouselImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const currentImages = scheduleData.carouselImages || [];
-        setScheduleData({ ...scheduleData, carouselImages: [...currentImages, reader.result as string] });
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImage(file, 800, 600);
+      const currentImages = scheduleData.carouselImages || [];
+      setScheduleData({ ...scheduleData, carouselImages: [...currentImages, compressed] });
     }
   };
 
@@ -2422,7 +2447,7 @@ function LandingView({ onNavigate, settings }: { onNavigate: (view: 'LOGIN' | 'R
           <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-900 mb-8">
             <ClipboardList className="text-white w-10 h-10" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">Clínica Escola PsicoGestão</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">Clinica Escola de Psicologia<br/>Angra dos Reis</h1>
           <p className="text-lg md:text-xl text-zinc-300 max-w-3xl mb-12">
             {settings.projectDescription || 'Bem-vindo ao sistema de agendamento e triagem da Clínica Escola. Oferecemos atendimento psicológico acessível e de qualidade para a comunidade.'}
           </p>
