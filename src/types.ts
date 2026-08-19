@@ -24,6 +24,12 @@ export interface Patient {
   status: PatientStatus;
   priority?: PatientPriority;
   age?: number;
+  had_previous_therapy?: boolean;
+  main_goal?: string;
+  availability?: string;
+  aware_of_clinic_school?: boolean;
+  reason_for_seeking?: string;
+  created_at?: string; // useful for date filtering
 }
 
 export type EvolutionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';

@@ -20,10 +20,13 @@ import {
   Edit2,
   Download,
   Upload,
-  Printer
+  Printer,
+  BarChart2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { User, Patient, Appointment, UserRole, PatientStatus, ClinicSettings, Evolution, EvolutionStatus } from './types';
+import { ReportsView } from './components/ReportsView';
 import { db } from './firebase';
 import { 
   collection, 
@@ -350,6 +353,15 @@ export default function App() {
 
           {(user.role === 'ADMIN' || user.role === 'PROFESSOR') && (
             <SidebarItem 
+              icon={<BarChart2 size={20} />} 
+              label="Relatórios" 
+              active={activeTab === 'reports'} 
+              onClick={() => setActiveTab('reports')} 
+            />
+          )}
+
+          {(user.role === 'ADMIN' || user.role === 'PROFESSOR') && (
+            <SidebarItem 
               icon={<Settings size={20} />} 
               label="Configurações" 
               active={activeTab === 'settings'} 
@@ -434,6 +446,14 @@ export default function App() {
                 appointments={appointments} 
                 settings={settings}
                 onUpdate={() => {}} 
+              />
+            </motion.div>
+          )}
+          {activeTab === 'reports' && (
+            <motion.div key="reports" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <ReportsView 
+                patients={patients} 
+                appointments={appointments} 
               />
             </motion.div>
           )}
@@ -2995,7 +3015,19 @@ function LandingView({ onNavigate, settings }: { onNavigate: (view: 'LOGIN' | 'R
 }
 
 function PublicRegisterView({ onBack }: { onBack: () => void }) {
-  const [formData, setFormData] = useState({ name: '', birth_date: '', phone: '', email: '', cpf: '', address: '' });
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    birth_date: '', 
+    phone: '', 
+    email: '', 
+    cpf: '', 
+    address: '',
+    had_previous_therapy: 'nao',
+    main_goal: '',
+    availability: '',
+    aware_of_clinic_school: 'sim',
+    reason_for_seeking: ''
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -3014,8 +3046,12 @@ function PublicRegisterView({ onBack }: { onBack: () => void }) {
       }
       await addDoc(collection(db, 'patients'), {
         ...formData,
+        had_previous_therapy: formData.had_previous_therapy === 'sim',
+        aware_of_clinic_school: formData.aware_of_clinic_school === 'sim',
         medical_record_number: Math.floor(100000 + Math.random() * 900000).toString(),
-        status: 'TRIAGEM'
+        status: 'TRIAGEM',
+        priority: 'BAIXA',
+        created_at: new Date().toISOString()
       });
       setSuccess(true);
     } catch (err) {
@@ -3075,6 +3111,51 @@ function PublicRegisterView({ onBack }: { onBack: () => void }) {
             <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço Completo</label>
             <input type="text" required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Rua, Número, Bairro, Cidade - UF" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
           </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Já realizou acompanhamento psicológico anteriormente?</label>
+            <select required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.had_previous_therapy} onChange={e => setFormData({ ...formData, had_previous_therapy: e.target.value })}>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Qual é o seu principal objetivo com o atendimento?</label>
+            <select required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.main_goal} onChange={e => setFormData({ ...formData, main_goal: e.target.value })}>
+              <option value="">Selecione uma opção</option>
+              <option value="Ansiedade">Ansiedade</option>
+              <option value="Depressão">Depressão</option>
+              <option value="Conflitos familiares">Conflitos familiares</option>
+              <option value="Autoconhecimento">Autoconhecimento</option>
+              <option value="Questões profissionais">Questões profissionais</option>
+              <option value="Outros">Outros</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Em qual período você possui maior disponibilidade para as sessões?</label>
+            <select required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.availability} onChange={e => setFormData({ ...formData, availability: e.target.value })}>
+              <option value="">Selecione um período</option>
+              <option value="Manhã">Manhã</option>
+              <option value="Tarde">Tarde</option>
+              <option value="Noite">Noite</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Você está ciente de que se trata de uma clínica-escola com atendimento realizado por estagiários supervisionados?</label>
+            <select required className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.aware_of_clinic_school} onChange={e => setFormData({ ...formData, aware_of_clinic_school: e.target.value })}>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Descreva brevemente o motivo de sua busca pelo atendimento psicológico hoje.</label>
+            <textarea required rows={4} className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" value={formData.reason_for_seeking} onChange={e => setFormData({ ...formData, reason_for_seeking: e.target.value })}></textarea>
+          </div>
+
           {error && <p className="md:col-span-2 text-red-500 text-sm">{error}</p>}
           <button type="submit" disabled={loading} className="md:col-span-2 mt-4 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">
             {loading ? 'Enviando...' : 'Finalizar Cadastro'}
