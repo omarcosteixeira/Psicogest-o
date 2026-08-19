@@ -6,9 +6,11 @@ export interface User {
   registration: string;
   role: UserRole;
   blocked?: boolean;
+  mustChangePassword?: boolean;
 }
 
 export type PatientStatus = 'TRIAGEM' | 'AGUARDANDO_CONSULTA' | 'PACIENTE_ATIVO' | 'FALTA' | 'ALTA' | 'DESISTENCIA';
+export type PatientPriority = 'BAIXA' | 'MEDIA' | 'ALTA';
 
 export interface Patient {
   id: string;
@@ -20,6 +22,7 @@ export interface Patient {
   cpf: string;
   address: string;
   status: PatientStatus;
+  priority?: PatientPriority;
   age?: number;
 }
 

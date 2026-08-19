@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user (Admin, Professor, Student)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "registration": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "PROFESSOR", "STUDENT_CLINIC", "STUDENT"] },
+        "password": { "type": "string" },
+        "blocked": { "type": "boolean" }
+      },
+      "required": ["name", "registration", "role", "password"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Clinic patient",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "medical_record_number": { "type": "string" },
+        "birth_date": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "cpf": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["TRIAGEM", "AGUARDANDO_CONSULTA", "PACIENTE_ATIVO", "FALTA", "ALTA", "DESISTENCIA"] }
+      },
+      "required": ["name", "cpf", "status"]
+    },
+    "Evolution": {
+      "title": "Evolution",
+      "description": "Patient evolution record",
+      "type": "object",
+      "properties": {
+        "appointment_id": { "type": "string" },
+        "patient_id": { "type": "string" },
+        "patient_name": { "type": "string" },
+        "medical_record_number": { "type": "string" },
+        "student_id": { "type": "string" },
+        "student_name": { "type": "string" },
+        "supervisor_id": { "type": "string" },
+        "supervisor_name": { "type": "string" },
+        "date": { "type": "string" },
+        "synthesis": { "type": "string" },
+        "conduct": { "type": "string" },
+        "observations": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "feedback": { "type": "string" }
+      },
+      "required": ["patient_id", "student_id", "supervisor_id", "date", "status"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Scheduled appointment",
+      "type": "object",
+      "properties": {
+        "patient_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "supervisor_id": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["SCHEDULED", "ATTENDED", "MISSED", "CANCELLED", "ALTA", "DESISTENCIA"] },
+        "patient_name": { "type": "string" },
+        "student_name": { "type": "string" },
+        "supervisor_name": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["patient_id", "date", "time", "status"]
+    },
+    "ClinicSettings": {
+      "title": "Clinic Settings",
+      "description": "General clinic configuration",
+      "type": "object",
+      "properties": {
+        "workDays": { "type": "array", "items": { "type": "number" } },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "interval": { "type": "number" },
+        "whatsappMessageTemplate": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "heroImageUrl": { "type": "string" },
+        "projectDescription": { "type": "string" },
+        "carouselImages": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["workDays", "startTime", "endTime", "interval"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of system users"
+    },
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Collection of patients"
+    },
+    "/evolutions/{evolutionId}": {
+      "schema": "Evolution",
+      "description": "Collection of evolution records"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Collection of appointments"
+    },
+    "/settings/{settingId}": {
+      "schema": "ClinicSettings",
+      "description": "Collection of clinic settings"
+    }
+  }
+}

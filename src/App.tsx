@@ -17,7 +17,10 @@ import {
   MessageCircle,
   LayoutDashboard,
   Trash2,
-  Edit2
+  Edit2,
+  Download,
+  Upload,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Patient, Appointment, UserRole, PatientStatus, ClinicSettings, Evolution, EvolutionStatus } from './types';
@@ -176,6 +179,9 @@ export default function App() {
           setError('Acesso bloqueado. Contate o administrador.');
         } else {
           setUser(userData);
+          if (userData.mustChangePassword) {
+            setShowChangePassword(true);
+          }
         }
       } else {
         setError('Login ou senha incorretos');
@@ -541,6 +547,55 @@ function DashboardView({ user, patients, appointments }: { user: User, patients:
           </table>
         </div>
       </div>
+
+      <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden mt-8">
+        <div className="p-6 border-b border-zinc-100 flex justify-between items-center">
+          <h3 className="font-bold text-zinc-900">Fila de Triagem (Aguardando Agendamento)</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-zinc-50 text-zinc-500 text-[10px] uppercase tracking-wider font-bold">
+              <tr>
+                <th className="px-6 py-3">Prioridade</th>
+                <th className="px-6 py-3">Nome</th>
+                <th className="px-6 py-3">Idade</th>
+                <th className="px-6 py-3">Telefone</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {patients
+                .filter(p => p.status === 'TRIAGEM')
+                .sort((a, b) => {
+                  const prioOrder: Record<string, number> = { 'ALTA': 0, 'MEDIA': 1, 'BAIXA': 2 };
+                  return (prioOrder[a.priority || 'BAIXA'] || 2) - (prioOrder[b.priority || 'BAIXA'] || 2);
+                })
+                .map(patient => (
+                <tr key={patient.id} className="hover:bg-zinc-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      patient.priority === 'ALTA' ? 'bg-red-100 text-red-800' :
+                      patient.priority === 'MEDIA' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {patient.priority || 'BAIXA'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium text-zinc-900">{patient.name}</td>
+                  <td className="px-6 py-4 text-sm text-zinc-600">{calculateAge(patient.birth_date)} anos</td>
+                  <td className="px-6 py-4 text-sm text-zinc-600">{patient.phone}</td>
+                </tr>
+              ))}
+              {patients.filter(p => p.status === 'TRIAGEM').length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-zinc-500">
+                    Não há pacientes na fila de triagem no momento.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -566,7 +621,8 @@ function RegisterPatientView({ onComplete }: { onComplete: () => void }) {
     phone: '',
     email: '',
     cpf: '',
-    address: ''
+    address: '',
+    priority: 'BAIXA'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -656,7 +712,7 @@ function RegisterPatientView({ onComplete }: { onComplete: () => void }) {
               onChange={e => setFormData({ ...formData, email: e.target.value })}
             />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço</label>
             <input
               type="text"
@@ -665,6 +721,19 @@ function RegisterPatientView({ onComplete }: { onComplete: () => void }) {
               value={formData.address}
               onChange={e => setFormData({ ...formData, address: e.target.value })}
             />
+          </div>
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Prioridade na Triagem</label>
+            <select
+              required
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+              value={formData.priority}
+              onChange={e => setFormData({ ...formData, priority: e.target.value })}
+            >
+              <option value="BAIXA">Baixa</option>
+              <option value="MEDIA">Média</option>
+              <option value="ALTA">Alta</option>
+            </select>
           </div>
           {error && <p className="md:col-span-2 text-red-500 text-sm">{error}</p>}
           <div className="md:col-span-2 flex justify-end gap-4 mt-4">
@@ -767,7 +836,7 @@ function SchedulingView({ patients, users, settings, appointments, onComplete }:
     const message = encodeURIComponent(
       template
         .replace('{paciente}', scheduledData.patientName)
-        .replace('{data}', new Date(scheduledData.date).toLocaleDateString('pt-BR'))
+        .replace('{data}', new Date(scheduledData.date + 'T12:00:00').toLocaleDateString('pt-BR'))
         .replace('{hora}', scheduledData.time)
     );
     const whatsappUrl = `https://wa.me/55${phone}?text=${message}`;
@@ -818,8 +887,13 @@ function SchedulingView({ patients, users, settings, appointments, onComplete }:
               onChange={e => setFormData({ ...formData, patient_id: e.target.value })}
             >
               <option value="">Selecione um paciente</option>
-              {triagemPatients.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({calculateAge(p.birth_date)} anos)</option>
+              {triagemPatients
+                .sort((a, b) => {
+                  const prioOrder: Record<string, number> = { 'ALTA': 0, 'MEDIA': 1, 'BAIXA': 2 };
+                  return (prioOrder[a.priority || 'BAIXA'] || 2) - (prioOrder[b.priority || 'BAIXA'] || 2);
+                })
+                .map(p => (
+                <option key={p.id} value={p.id}>[{p.priority || 'BAIXA'}] {p.name} ({calculateAge(p.birth_date)} anos)</option>
               ))}
             </select>
           </div>
@@ -905,6 +979,19 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
     return appointments.filter(a => a.student_id === user.id);
   }, [user, appointments]);
 
+  const upcomingAppointments = useMemo(() => {
+    return filteredAppointments
+      .filter(a => a.status === 'SCHEDULED')
+      .sort((a, b) => new Date(a.date + 'T12:00:00').getTime() - new Date(b.date + 'T12:00:00').getTime());
+  }, [filteredAppointments]);
+
+  const historyAppointments = useMemo(() => {
+    return filteredAppointments
+      .filter(a => a.status !== 'SCHEDULED')
+      .sort((a, b) => new Date(b.date + 'T12:00:00').getTime() - new Date(a.date + 'T12:00:00').getTime());
+  }, [filteredAppointments]);
+
+  const [activeTab, setActiveTab] = useState<'UPCOMING' | 'HISTORY'>('UPCOMING');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [actionType, setActionType] = useState<'FINALIZE' | 'SCHEDULE_NEXT' | 'EVOLUTION' | null>(null);
   const [nextDate, setNextDate] = useState('');
@@ -1032,7 +1119,7 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
     const message = encodeURIComponent(
       template
         .replace('{paciente}', scheduledData.patientName)
-        .replace('{data}', new Date(scheduledData.date).toLocaleDateString('pt-BR'))
+        .replace('{data}', new Date(scheduledData.date + 'T12:00:00').toLocaleDateString('pt-BR'))
         .replace('{hora}', scheduledData.time)
     );
     return `https://wa.me/55${phone}?text=${message}`;
@@ -1044,6 +1131,29 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
         <h1 className="text-2xl font-bold text-zinc-900">Minhas Consultas</h1>
         <p className="text-zinc-500">Gerencie seus atendimentos e presenças.</p>
       </header>
+
+      <div className="flex gap-4 border-b border-zinc-200">
+        <button
+          onClick={() => setActiveTab('UPCOMING')}
+          className={`px-4 py-2 font-semibold text-sm border-b-2 transition-colors ${
+            activeTab === 'UPCOMING'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700'
+          }`}
+        >
+          Próximas Consultas ({upcomingAppointments.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('HISTORY')}
+          className={`px-4 py-2 font-semibold text-sm border-b-2 transition-colors ${
+            activeTab === 'HISTORY'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700'
+          }`}
+        >
+          Histórico ({historyAppointments.length})
+        </button>
+      </div>
 
       <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -1058,11 +1168,11 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {filteredAppointments.map(app => (
+              {(activeTab === 'UPCOMING' ? upcomingAppointments : historyAppointments).map(app => (
                 <tr key={app.id} className="hover:bg-zinc-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-zinc-900">{app.patient_name}</td>
                   <td className="px-6 py-4 text-sm text-zinc-600">
-                    {new Date(app.date).toLocaleDateString('pt-BR')} às {app.time}
+                    {new Date(app.date + 'T12:00:00').toLocaleDateString('pt-BR')} às {app.time}
                   </td>
                   <td className="px-6 py-4 text-sm text-zinc-600">{app.supervisor_name}</td>
                   <td className="px-6 py-4">
@@ -1290,6 +1400,22 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  const [filterName, setFilterName] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStudent, setFilterStudent] = useState('');
+
+  const filteredPatients = useMemo(() => {
+    return patients.filter(p => {
+      const matchName = (p.name || '').toLowerCase().includes(filterName.toLowerCase()) || 
+                        (p.medical_record_number || '').toLowerCase().includes(filterName.toLowerCase());
+      const matchStatus = filterStatus ? p.status === filterStatus : true;
+      const patientApps = appointments.filter(a => a.patient_id === p.id);
+      const responsibleStudent = patientApps.length > 0 ? patientApps[patientApps.length - 1].student_name || '' : '';
+      const matchStudent = filterStudent ? responsibleStudent.toLowerCase().includes(filterStudent.toLowerCase()) : true;
+      return matchName && matchStatus && matchStudent;
+    });
+  }, [patients, filterName, filterStatus, filterStudent, appointments]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1400,6 +1526,132 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
     }
   };
 
+  const handlePrintFullRecord = () => {
+    if (!selectedPatient) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Por favor, permita pop-ups para imprimir o prontuário.');
+      return;
+    }
+
+    const logoHtml = settings?.logoUrl 
+      ? `<div style="text-align: center; margin-bottom: 20px;"><img src="${settings.logoUrl}" style="max-height: 80px;" /></div>`
+      : '';
+
+    const appointmentsHtml = patientAppointments.map(app => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd;">${new Date(app.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${app.time}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${app.status === 'ATTENDED' ? 'Realizado' : app.status === 'MISSED' ? 'Falta' : app.status === 'SCHEDULED' ? 'Agendado' : app.status}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${app.student_name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${app.supervisor_name}</td>
+      </tr>
+    `).join('');
+
+    const evolutionsHtml = evolutions.map(ev => `
+      <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid;">
+        <p><strong>Data:</strong> ${new Date(ev.date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+        <p><strong>Atendente:</strong> ${ev.student_name}</p>
+        <p><strong>Supervisor:</strong> ${ev.supervisor_name}</p>
+        <p><strong>Status:</strong> ${ev.status === 'APPROVED' ? 'Aprovado' : ev.status === 'REJECTED' ? 'Rejeitado' : 'Pendente'}</p>
+        
+        <div style="margin-top: 10px;">
+          <p><strong>Síntese:</strong></p>
+          <p style="white-space: pre-wrap; font-size: 14px; margin-top: 4px;">${ev.synthesis}</p>
+        </div>
+        <div style="margin-top: 10px;">
+          <p><strong>Conduta:</strong></p>
+          <p style="white-space: pre-wrap; font-size: 14px; margin-top: 4px;">${ev.conduct}</p>
+        </div>
+        ${ev.observations ? `
+          <div style="margin-top: 10px;">
+            <p><strong>Observações:</strong></p>
+            <p style="white-space: pre-wrap; font-size: 14px; margin-top: 4px;">${ev.observations}</p>
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Prontuário - ${selectedPatient.name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+            h1, h2, h3 { color: #111; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+            .label { font-weight: bold; font-size: 12px; color: #666; text-transform: uppercase; }
+            .value { font-size: 16px; margin-top: 4px; }
+            table { border-collapse: collapse; margin-bottom: 30px; width: 100%; }
+            th { background: #f0f0f0; padding: 10px; text-align: left; border: 1px solid #ddd; }
+            @media print { .no-print { display: none; } body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            ${logoHtml}
+            <h1>Prontuário Completo</h1>
+            <p>Clinica Escola de Psicologia Angra dos Reis</p>
+          </div>
+          
+          <h2>Dados do Paciente</h2>
+          <div class="grid">
+            <div>
+              <div class="label">Nome</div>
+              <div class="value">${selectedPatient.name}</div>
+            </div>
+            <div>
+              <div class="label">Prontuário</div>
+              <div class="value">${selectedPatient.medical_record_number}</div>
+            </div>
+            <div>
+              <div class="label">CPF</div>
+              <div class="value">${selectedPatient.cpf}</div>
+            </div>
+            <div>
+              <div class="label">Data de Nascimento</div>
+              <div class="value">${selectedPatient.birth_date ? new Date(selectedPatient.birth_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</div>
+            </div>
+          </div>
+          
+          <h2>Histórico de Consultas</h2>
+          ${patientAppointments.length > 0 ? `
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Hora</th>
+                  <th>Status</th>
+                  <th>Atendente</th>
+                  <th>Supervisor</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${appointmentsHtml}
+              </tbody>
+            </table>
+          ` : '<p>Nenhuma consulta registrada.</p>'}
+          
+          <h2>Evoluções Clínicas</h2>
+          ${evolutions.length > 0 ? evolutionsHtml : '<p>Nenhuma evolução registrada.</p>'}
+          
+          <div class="no-print" style="margin-top: 40px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">Imprimir Prontuário</button>
+          </div>
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  };
+
   const handlePrint = (ev: Evolution) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -1431,7 +1683,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
           <div class="grid">
             <div><span class="label">Prontuário:</span><br/>${ev.medical_record_number}</div>
             <div><span class="label">Paciente:</span><br/>${ev.patient_name}</div>
-            <div><span class="label">Data:</span><br/>${new Date(ev.date).toLocaleDateString('pt-BR')}</div>
+            <div><span class="label">Data:</span><br/>${new Date(ev.date + 'T12:00:00').toLocaleDateString('pt-BR')}</div>
             <div><span class="label">Atendente:</span><br/>${ev.student_name}</div>
           </div>
           <div class="section">
@@ -1475,6 +1727,13 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
         {selectedPatient && (user.role === 'ADMIN' || user.role === 'PROFESSOR' || user.role === 'STUDENT_CLINIC') && (
           <div className="flex gap-2">
             <button 
+              onClick={handlePrintFullRecord}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
+            >
+              <Printer size={18} />
+              Imprimir Prontuário
+            </button>
+            <button 
               onClick={handleEditPatient}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-bold hover:bg-indigo-100 transition-colors"
             >
@@ -1486,25 +1745,127 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-colors"
             >
               <Trash2 size={18} />
-              Excluir Paciente
+              Excluir
             </button>
           </div>
         )}
       </header>
 
-      <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
-        <label className="block text-sm font-medium text-zinc-700 mb-2">Selecione o Paciente</label>
-        <select
-          className="w-full px-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500"
-          value={selectedPatientId}
-          onChange={e => setSelectedPatientId(e.target.value)}
-        >
-          <option value="">Selecione um paciente...</option>
-          {patients.map(p => (
-            <option key={p.id} value={p.id}>{p.name} (Prontuário: {p.medical_record_number})</option>
-          ))}
-        </select>
-      </div>
+      {!selectedPatientId ? (
+        <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
+          <div>
+            <h3 className="font-bold text-zinc-900 mb-4">Busca Avançada de Pacientes</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Nome ou Prontuário</label>
+                <input
+                  type="text"
+                  placeholder="Ex: João, 2023001"
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={filterName}
+                  onChange={e => setFilterName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Status</label>
+                <select
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                >
+                  <option value="">Todos</option>
+                  <option value="TRIAGEM">Triagem</option>
+                  <option value="AGUARDANDO_CONSULTA">Aguardando Consulta</option>
+                  <option value="PACIENTE_ATIVO">Ativo</option>
+                  <option value="ALTA">Alta</option>
+                  <option value="FALTA">Falta</option>
+                  <option value="DESISTENCIA">Desistência</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Atendente Responsável</label>
+                <input
+                  type="text"
+                  placeholder="Nome do aluno/atendente"
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={filterStudent}
+                  onChange={e => setFilterStudent(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-zinc-50 text-zinc-500 text-[10px] uppercase tracking-wider font-bold">
+                <tr>
+                  <th className="px-6 py-3">Prioridade</th>
+                  <th className="px-6 py-3">Nome do Paciente</th>
+                  <th className="px-6 py-3">Prontuário</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {filteredPatients.map(p => (
+                  <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
+                    <td className="px-6 py-4">
+                      {p.status === 'TRIAGEM' ? (
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                          p.priority === 'ALTA' ? 'bg-red-100 text-red-800' :
+                          p.priority === 'MEDIA' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {p.priority || 'BAIXA'}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-zinc-900">{p.name}</td>
+                    <td className="px-6 py-4 text-sm text-zinc-600">{p.medical_record_number}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                        p.status === 'PACIENTE_ATIVO' ? 'bg-green-100 text-green-800' :
+                        p.status === 'TRIAGEM' ? 'bg-yellow-100 text-yellow-800' :
+                        p.status === 'ALTA' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => setSelectedPatientId(p.id)}
+                        className="text-indigo-600 font-bold text-sm hover:text-indigo-800"
+                      >
+                        Ver Prontuário
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredPatients.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">
+                      Nenhum paciente encontrado com esses filtros.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <button 
+              onClick={() => setSelectedPatientId('')}
+              className="text-sm text-indigo-600 font-bold hover:text-indigo-800 flex items-center gap-1"
+            >
+              <ChevronLeft size={16} /> Voltar para a lista
+            </button>
+          </div>
+          {/* Detailed Patient View Continues Below */}
+
 
       {isEditingPatient && selectedPatient && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
@@ -1541,7 +1902,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
                   onChange={e => setEditingPatientData({ ...editingPatientData, email: e.target.value })}
                 />
               </div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço</label>
                 <input
                   type="text"
@@ -1550,6 +1911,18 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
                   value={editingPatientData.address || ''}
                   onChange={e => setEditingPatientData({ ...editingPatientData, address: e.target.value })}
                 />
+              </div>
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Prioridade</label>
+                <select
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={editingPatientData.priority || 'BAIXA'}
+                  onChange={e => setEditingPatientData({ ...editingPatientData, priority: e.target.value as any })}
+                >
+                  <option value="BAIXA">Baixa</option>
+                  <option value="MEDIA">Média</option>
+                  <option value="ALTA">Alta</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Status</label>
@@ -1618,7 +1991,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
               <tbody className="divide-y divide-zinc-100">
                 {patientAppointments.map(app => (
                   <tr key={app.id}>
-                    <td className="px-6 py-4 text-sm text-zinc-900">{new Date(app.date).toLocaleDateString('pt-BR')}</td>
+                    <td className="px-6 py-4 text-sm text-zinc-900">{new Date(app.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                     <td className="px-6 py-4 text-sm text-zinc-600">{app.time}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -1658,7 +2031,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
                 <div key={ev.id} className="border border-zinc-100 rounded-xl p-4 space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-sm font-bold text-zinc-900">{new Date(ev.date).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-sm font-bold text-zinc-900">{new Date(ev.date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                       <p className="text-xs text-zinc-500">Atendente: {ev.student_name} | Supervisor: {ev.supervisor_name}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -1728,8 +2101,10 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
           </div>
         </div>
       )}
+      </>
+    )}
 
-      {/* Delete Confirmation Modal */}
+    {/* Delete Confirmation Modal */}
       {showDeleteConfirm && selectedPatient && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
           <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl text-center">
@@ -1953,7 +2328,7 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
         await updateDoc(doc(db, 'users', editingId), formData);
         setEditingId(null);
       } else {
-        await addDoc(collection(db, 'users'), formData);
+        await addDoc(collection(db, 'users'), { ...formData, mustChangePassword: true });
       }
       setFormData({ name: '', registration: '', password: '', role: 'STUDENT' });
       onUpdate();
@@ -1990,12 +2365,76 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Check document size before saving
+      const dataString = JSON.stringify(scheduleData);
+      const sizeInBytes = new Blob([dataString]).size;
+      const sizeInMB = sizeInBytes / (1024 * 1024);
+      
+      if (sizeInMB > 0.9) {
+        alert(`O tamanho total das imagens (${sizeInMB.toFixed(2)} MB) está muito próximo ou excede o limite de 1MB do banco de dados. Por favor, remova algumas imagens do carrossel ou tente novamente com imagens menores.`);
+        return;
+      }
+
       await setDoc(doc(db, 'settings', 'clinic_schedule'), scheduleData);
       onUpdateSettings(scheduleData);
       alert('Configurações atualizadas com sucesso!');
     } catch (err) {
       console.error(err);
-      alert('Erro ao atualizar configurações');
+      alert('Erro ao atualizar configurações. O tamanho das imagens pode ter excedido o limite.');
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    const { utils, writeFile } = await import('xlsx');
+    const ws = utils.json_to_sheet([
+      { Nome: 'João Silva', Matrícula: '2023001', Senha: '123', 'Tipo de Acesso': 'Professor/supervisor' }
+    ]);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, 'Usuarios');
+    writeFile(wb, 'modelo_usuarios.xlsx');
+  };
+
+  const handleImportUsers = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const { read, utils } = await import('xlsx');
+      const data = await file.arrayBuffer();
+      const wb = read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = utils.sheet_to_json(ws);
+      
+      let importedCount = 0;
+      
+      for (const row of rows) {
+        if (!row.Nome || !row.Matrícula) continue;
+        
+        let role = 'STUDENT';
+        const accessType = String(row['Tipo de Acesso'] || '').toLowerCase();
+        if (accessType.includes('admin')) role = 'ADMIN';
+        else if (accessType.includes('professor') || accessType.includes('supervisor')) role = 'PROFESSOR';
+        else if (accessType.includes('clinica') || accessType.includes('clínica')) role = 'STUDENT_CLINIC';
+        
+        await addDoc(collection(db, 'users'), {
+          name: String(row.Nome),
+          registration: String(row.Matrícula),
+          password: String(row.Senha || '123456'),
+          role: role,
+          mustChangePassword: true
+        });
+        importedCount++;
+      }
+      
+      alert(`${importedCount} usuários importados com sucesso!`);
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao importar usuários');
+    } finally {
+      setLoading(false);
+      e.target.value = '';
     }
   };
 
@@ -2025,7 +2464,7 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
+          resolve(canvas.toDataURL('image/webp', 0.5));
         };
         img.src = event.target?.result as string;
       };
@@ -2036,25 +2475,28 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const compressed = await compressImage(file, 400, 400);
+      const compressed = await compressImage(file, 200, 200);
       setScheduleData({ ...scheduleData, logoUrl: compressed });
+      e.target.value = '';
     }
   };
 
   const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const compressed = await compressImage(file, 1200, 800);
+      const compressed = await compressImage(file, 800, 600);
       setScheduleData({ ...scheduleData, heroImageUrl: compressed });
+      e.target.value = '';
     }
   };
 
   const handleCarouselImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const compressed = await compressImage(file, 800, 600);
+      const compressed = await compressImage(file, 600, 400);
       const currentImages = scheduleData.carouselImages || [];
       setScheduleData({ ...scheduleData, carouselImages: [...currentImages, compressed] });
+      e.target.value = '';
     }
   };
 
@@ -2095,7 +2537,22 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* User Registration */}
         <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
-          <h3 className="font-bold text-zinc-900 mb-6">{editingId ? 'Editar Usuário' : 'Cadastrar Usuário'}</h3>
+          <div className="flex justify-between items-start mb-6">
+            <h3 className="font-bold text-zinc-900">{editingId ? 'Editar Usuário' : 'Cadastrar Usuário'}</h3>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 flex items-center justify-end"
+              >
+                <Download size={14} className="mr-1" /> Baixar Modelo
+              </button>
+              <label className="text-xs bg-zinc-100 text-zinc-700 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-zinc-200 transition-colors font-medium flex items-center">
+                <Upload size={14} className="mr-1" /> Importar Excel
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportUsers} />
+              </label>
+            </div>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Nome Completo</label>
@@ -2240,7 +2697,16 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
               <label className="block text-sm font-medium text-zinc-700 mb-2">Logo da Clínica (PDF)</label>
               <div className="flex items-center gap-4">
                 {scheduleData.logoUrl && (
-                  <img src={scheduleData.logoUrl} alt="Logo" className="h-12 w-auto object-contain border border-zinc-200 rounded p-1" />
+                  <div className="relative group">
+                    <img src={scheduleData.logoUrl} alt="Logo" className="h-12 w-auto object-contain border border-zinc-200 rounded p-1" />
+                    <button
+                      type="button"
+                      onClick={() => setScheduleData({ ...scheduleData, logoUrl: '' })}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  </div>
                 )}
                 <input
                   type="file"
@@ -2280,7 +2746,16 @@ function SettingsView({ users, settings, onUpdate, onUpdateSettings }: { users: 
               <label className="block text-sm font-medium text-zinc-700 mb-2">Imagem de Fundo (Hero)</label>
               <div className="flex items-center gap-4">
                 {scheduleData.heroImageUrl && (
-                  <img src={scheduleData.heroImageUrl} alt="Hero" className="h-20 w-32 object-cover border border-zinc-200 rounded" />
+                  <div className="relative group">
+                    <img src={scheduleData.heroImageUrl} alt="Hero" className="h-20 w-32 object-cover border border-zinc-200 rounded" />
+                    <button
+                      type="button"
+                      onClick={() => setScheduleData({ ...scheduleData, heroImageUrl: '' })}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  </div>
                 )}
                 <input
                   type="file"
@@ -2687,7 +3162,7 @@ function CheckAppointmentView({ onBack }: { onBack: () => void }) {
                 <div className="bg-white p-4 rounded-lg border border-zinc-200 space-y-2">
                   <div className="flex items-center gap-2 text-zinc-700">
                     <Calendar className="w-4 h-4 text-indigo-600" />
-                    <span className="font-medium">{new Date(result.appointment.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                    <span className="font-medium">{new Date(result.appointment.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-700">
                     <Clock className="w-4 h-4 text-indigo-600" />
@@ -2745,7 +3220,8 @@ function ChangePasswordModal({ user, onClose, onSuccess }: { user: User, onClose
 
       // Update password
       await updateDoc(doc(db, 'users', user.id), {
-        password: passwords.new
+        password: passwords.new,
+        mustChangePassword: false
       });
       
       onSuccess();
@@ -2810,14 +3286,16 @@ function ChangePasswordModal({ user, onClose, onSuccess }: { user: User, onClose
             >
               {loading ? 'Alterando...' : 'Alterar Senha'}
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors disabled:opacity-50"
-            >
-              Cancelar
-            </button>
+            {!user.mustChangePassword && (
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 border border-zinc-300 text-zinc-600 rounded-lg font-bold hover:bg-zinc-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
       </motion.div>
