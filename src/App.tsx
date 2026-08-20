@@ -222,7 +222,7 @@ export default function App() {
                   <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-200">
                     <ClipboardList className="text-white w-8 h-8" />
                   </div>
-                  <h1 className="text-2xl font-bold text-zinc-900 text-center">Clinica Escola de Psicologia</h1>
+                  <h1 className="text-2xl font-bold text-zinc-900 text-center">Clinica Escola Angra dos Reis</h1>
                   <p className="text-zinc-500 text-sm">Angra dos Reis</p>
                 </div>
 
@@ -302,7 +302,7 @@ export default function App() {
             <ClipboardList className="text-white w-5 h-5" />
           </div>
           <div>
-            <h2 className="font-bold text-zinc-900 leading-tight text-sm">Clinica Escola de Psicologia</h2>
+            <h2 className="font-bold text-zinc-900 leading-tight text-sm">Clinica Escola Angra dos Reis</h2>
             <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Angra dos Reis</span>
           </div>
         </div>
@@ -851,7 +851,7 @@ function SchedulingView({ patients, users, settings, appointments, onComplete }:
 
   if (scheduledData) {
     const phone = scheduledData.phone.replace(/\D/g, '');
-    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola de Psicologia Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
+    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
     
     const message = encodeURIComponent(
       template
@@ -1134,7 +1134,7 @@ function MyAppointmentsView({ user, appointments, settings, onUpdate }: { user: 
   const getWhatsappUrl = () => {
     if (!scheduledData) return '';
     const phone = scheduledData.phone.replace(/\D/g, '');
-    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola de Psicologia Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
+    const template = settings.whatsappMessageTemplate || 'Olá {paciente}, sua consulta na Clinica Escola Angra dos Reis está agendada para {data} às {hora}. Por favor, confirme sua presença.';
     
     const message = encodeURIComponent(
       template
@@ -1613,7 +1613,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
           <div class="header">
             ${logoHtml}
             <h1>Prontuário Completo</h1>
-            <p>Clinica Escola de Psicologia Angra dos Reis</p>
+            <p>Clinica Escola Angra dos Reis</p>
           </div>
           
           <h2>Dados do Paciente</h2>
@@ -1698,7 +1698,7 @@ function PatientHistoryView({ patients, appointments, user, onBack }: { patients
           ${logoHtml}
           <div class="header">
             <h1>EVOLUÇÃO PSICOLÓGICA</h1>
-            <p>Clinica Escola de Psicologia Angra dos Reis</p>
+            <p>Clinica Escola Angra dos Reis</p>
           </div>
           <div class="grid">
             <div><span class="label">Prontuário:</span><br/>${ev.medical_record_number}</div>
@@ -2942,9 +2942,9 @@ function LandingView({ onNavigate, settings }: { onNavigate: (view: 'LOGIN' | 'R
           <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-900 mb-8">
             <ClipboardList className="text-white w-10 h-10" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">Clinica Escola de Psicologia<br/>Angra dos Reis</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">Clinica Escola Angra dos Reis</h1>
           <p className="text-lg md:text-xl text-zinc-300 max-w-3xl mb-12">
-            {settings.projectDescription || 'Bem-vindo ao sistema de agendamento e triagem da Clínica Escola. Oferecemos atendimento psicológico acessível e de qualidade para a comunidade.'}
+            {settings.projectDescription || 'Bem-vindo ao sistema de agendamento e triagem da Clínica Escola. Oferecemos atendimento psicológico, Fisioterapia e Veterinário acessível e de qualidade para a comunidade.'}
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
@@ -3015,6 +3015,8 @@ function LandingView({ onNavigate, settings }: { onNavigate: (view: 'LOGIN' | 'R
 }
 
 function PublicRegisterView({ onBack }: { onBack: () => void }) {
+  const [selectedClinic, setSelectedClinic] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({ 
     name: '', 
     birth_date: '', 
@@ -3061,6 +3063,89 @@ function PublicRegisterView({ onBack }: { onBack: () => void }) {
       setLoading(false);
     }
   };
+
+  if (!selectedClinic) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 py-12">
+        <div className="w-full max-w-4xl">
+          <button onClick={onBack} className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 mb-8 transition-colors">
+            <ChevronRight className="rotate-180 w-4 h-4" /> Voltar
+          </button>
+          
+          <h2 className="text-3xl font-bold text-zinc-900 mb-2 text-center">Selecione a Clínica</h2>
+          <p className="text-zinc-500 text-center mb-10">Escolha a especialidade para a qual deseja atendimento.</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <button 
+              onClick={() => setSelectedClinic('FISIOTERAPIA')}
+              className="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 hover:border-indigo-500 hover:shadow-md transition-all flex flex-col items-center text-center gap-4 group"
+            >
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <ClipboardList className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-zinc-900 mb-2">Clínica de Fisioterapia</h3>
+                <p className="text-sm text-zinc-500">Reabilitação, prevenção e tratamento fisioterapêutico.</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setSelectedClinic('PSICOLOGIA')}
+              className="bg-white p-8 rounded-2xl shadow-sm border border-indigo-200 hover:border-indigo-500 hover:shadow-md transition-all flex flex-col items-center text-center gap-4 group relative overflow-hidden"
+            >
+              <div className="absolute top-0 inset-x-0 h-1 bg-indigo-500"></div>
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <UserCheck className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-zinc-900 mb-2">Clínica de Psicologia</h3>
+                <p className="text-sm text-zinc-500">Acompanhamento terapêutico e triagem psicológica.</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setSelectedClinic('VETERINARIA')}
+              className="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 hover:border-indigo-500 hover:shadow-md transition-all flex flex-col items-center text-center gap-4 group"
+            >
+              <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                <PlusCircle className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-zinc-900 mb-2">Medicina Veterinária</h3>
+                <p className="text-sm text-zinc-500">Atendimento clínico para pequenos e grandes animais.</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedClinic === 'FISIOTERAPIA' || selectedClinic === 'VETERINARIA') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mb-6">
+          <Calendar className="text-yellow-600 w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-bold text-zinc-900 mb-4">Cadastro Indisponível</h2>
+        <p className="text-zinc-600 max-w-md mb-8">
+          A ficha de cadastro para esta clínica ainda está indisponível através do sistema online. 
+          <br /><br />
+          Por favor, faça contato via WhatsApp pelo número:<br/>
+          <strong className="text-xl text-zinc-900 mt-2 block">24 98137-2753</strong>
+        </p>
+        <div className="flex gap-4">
+          <button onClick={() => setSelectedClinic(null)} className="px-6 py-3 bg-zinc-200 text-zinc-800 font-bold rounded-lg hover:bg-zinc-300 transition-colors">
+            Voltar
+          </button>
+          <a href="https://wa.me/5524981372753" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition-colors">
+            <MessageCircle className="w-5 h-5" />
+            Abrir WhatsApp
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (
